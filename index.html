@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bubble Chart</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           #f8fafc;
+      --surface:      #ffffff;
+      --border:       #e2e8f0;
+      --text:         #0f172a;
+      --text-muted:   #64748b;
+      --text-subtle:  #94a3b8;
+      --blue:         #3b82f6;
+      --radius:       10px;
+      --shadow:       0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+      --shadow-lg:    0 10px 25px rgba(0,0,0,.1), 0 4px 10px rgba(0,0,0,.06);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    #app {
+      max-width: 1140px;
+      margin: 0 auto;
+      padding: 40px 24px 64px;
+    }
+
+    /* ── Header ─────────────────────────────────────── */
+    .page-title    { font-size: 22px; font-weight: 700; letter-spacing: -.3px; }
+    .page-subtitle { font-size: 14px; color: var(--text-muted); margin-top: 4px; }
+
+    /* ── Upload ─────────────────────────────────────── */
+    #upload-section { margin-top: 32px; }
+
+    #upload-zone {
+      background: var(--surface);
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 60px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .15s ease, background .15s ease;
+      user-select: none;
+    }
+
+    #upload-zone:hover,
+    #upload-zone.drag-over {
+      border-color: var(--blue);
+      background: #eff6ff;
+    }
+
+    .upload-icon     { color: var(--text-subtle); margin: 0 auto 14px; display: block; }
+    .upload-primary  { font-size: 15px; font-weight: 500; }
+    .upload-secondary{ font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+    .upload-hint {
+      display: inline-block;
+      margin-top: 14px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-family: ui-monospace, 'SFMono-Regular', 'Fira Code', monospace;
+      color: var(--text-subtle);
+      background: #f1f5f9;
+      border-radius: 4px;
+    }
+
+    #upload-error {
+      display: none;
+      margin-top: 10px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #b91c1c;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 6px;
+    }
+
+    /* ── Chart container ────────────────────────────── */
+    #chart-container {
+      display: none;
+      margin-top: 32px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 24px;
+    }
+
+    .chart-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .chart-title    { font-size: 15px; font-weight: 600; }
+    .chart-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 3px; }
+
+    .btn-ghost {
+      font-size: 13px;
+      color: var(--text-muted);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: border-color .15s, color .15s;
+      flex-shrink: 0;
+    }
+    .btn-ghost:hover { border-color: var(--text-muted); color: var(--text); }
+
+    /* ── Legend ─────────────────────────────────────── */
+    #legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 16px;
+      margin-bottom: 14px;
+    }
+
+    .legend-item   { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text-muted); }
+    .legend-swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; opacity: .85; }
+
+    #chart { display: block; width: 100%; overflow: visible; }
+
+    /* ── Tooltip ────────────────────────────────────── */
+    #tooltip {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      min-width: 200px;
+      max-width: 290px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-lg);
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .tt-header {
+      padding: 10px 14px 9px;
+      font-size: 13px;
+      font-weight: 600;
+      background: #f8fafc;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tt-body { padding: 6px 0; }
+
+    .tt-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      padding: 3px 14px;
+      font-size: 12px;
+    }
+
+    .tt-key { color: var(--text-muted); }
+    .tt-val { font-weight: 500; text-align: right; word-break: break-word; }
+
+    /* ── D3 axis/grid helpers ───────────────────────── */
+    .axis-label { font-size: 12.5px; fill: #475569; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div>
+      <h1 class="page-title">Bubble Chart</h1>
+      <p class="page-subtitle">Revenue · AOI · Employees — by company and category</p>
+    </div>
+
+    <div id="upload-section">
+      <div id="upload-zone" role="button" tabindex="0" aria-label="Upload CSV file">
+        <svg class="upload-icon" width="44" height="44" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="16 16 12 12 8 16"></polyline>
+          <line x1="12" y1="12" x2="12" y2="21"></line>
+          <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
+        </svg>
+        <p class="upload-primary">Upload CSV file</p>
+        <p class="upload-secondary">Click to browse or drag &amp; drop</p>
+        <code class="upload-hint">Company, Category, Rev (B), AOI (B), Emp (K)</code>
+      </div>
+      <div id="upload-error" role="alert"></div>
+      <input type="file" id="file-input" accept=".csv" style="display:none" aria-hidden="true">
+    </div>
+
+    <div id="chart-container">
+      <div class="chart-header">
+        <div>
+          <p class="chart-title">Revenue vs. AOI</p>
+          <p class="chart-subtitle">Bubble size = Employees (K) &nbsp;·&nbsp; Color = Category</p>
+        </div>
+        <button class="btn-ghost" id="reload-btn">Upload new file</button>
+      </div>
+      <div id="legend" aria-label="Category legend"></div>
+      <svg id="chart" role="img" aria-label="Bubble chart of company revenue versus AOI"></svg>
+    </div>
+  </div>
+
+  <div id="tooltip" role="tooltip"></div>
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script>
+  'use strict';
+
+  // ── Config ────────────────────────────────────────────────────────────────
+  const CONFIG = {
+    margin:     { top: 24, right: 32, bottom: 72, left: 82 },
+    minRadius:  5,
+    maxRadius:  72,
+    opacity:    0.5,
+    stroke:     '#ffffff',
+    strokeW:    1,
+    colors:     d3.schemeTableau10,
+    transition: 550,
+  };
+
+
+  // ── Data Parsing ──────────────────────────────────────────────────────────
+
+  /** Robustly parse a single value to a number, or return null. */
+  const parseNumber = (val) => {
+    if (val == null) return null;
+    const raw = String(val).trim();
+    if (!raw || /^(n\/?a|null|undefined|[-–—])$/i.test(raw)) return null;
+    const isAccounting = raw.startsWith('(') && raw.endsWith(')');
+    const cleaned = raw.replace(/[$,\s%()]/g, '');
+    const n = parseFloat(cleaned);
+    if (isNaN(n)) return null;
+    return isAccounting ? -n : n;
+  };
+
+  const normalizeKey = (k) => String(k).trim().toLowerCase().replace(/\s+/g, ' ');
+
+  /** Find the first matching column key from a list of candidates (case-insensitive). */
+  const findCol = (keys, ...candidates) => {
+    const index = keys.map(k => [k, normalizeKey(k)]);
+    for (const c of candidates) {
+      const match = index.find(([, n]) => n === c.toLowerCase());
+      if (match) return match[0];
+    }
+    return null;
+  };
+
+  /** Parse raw d3.csvParse rows into typed, cleaned data points. */
+  const parseData = (rows) => {
+    if (!rows.length) return [];
+    const keys = Object.keys(rows[0]);
+    const C = {
+      company:  findCol(keys, 'company', 'company name', 'name', 'ticker'),
+      category: findCol(keys, 'category', 'sector', 'industry', 'segment', 'type'),
+      rev:      findCol(keys, 'rev (b)', 'rev(b)', 'revenue (b)', 'revenue(b)', 'revenue', 'rev'),
+      aoi:      findCol(keys, 'aoi (b)', 'aoi(b)', 'aoi'),
+      emp:      findCol(keys, 'emp (k)', 'emp(k)', 'employees (k)', 'employees(k)', 'employees', 'emp'),
+    };
+
+    return rows
+      .map(r => ({
+        company:  C.company  ? String(r[C.company]  ?? '').trim() || '—' : '—',
+        category: C.category ? String(r[C.category] ?? '').trim() || 'Unknown' : 'Unknown',
+        rev:      parseNumber(C.rev  ? r[C.rev]  : null),
+        aoi:      parseNumber(C.aoi  ? r[C.aoi]  : null),
+        emp:      parseNumber(C.emp  ? r[C.emp]  : null),
+        _raw:     r,
+      }))
+      .filter(d => d.rev != null && d.aoi != null && d.emp != null && d.emp > 0);
+  };
+
+
+  // ── Tooltip ───────────────────────────────────────────────────────────────
+
+  const Tooltip = (() => {
+    const el = document.getElementById('tooltip');
+
+    const reposition = (event) => {
+      const pad = 14;
+      const tw  = el.offsetWidth;
+      const th  = el.offsetHeight;
+      let   x   = event.clientX + pad;
+      let   y   = event.clientY + pad;
+      if (x + tw > window.innerWidth)  x = event.clientX - tw - pad;
+      if (y + th > window.innerHeight) y = event.clientY - th - pad;
+      el.style.left = `${x}px`;
+      el.style.top  = `${y}px`;
+    };
+
+    const show = (event, d) => {
+      const rows = Object.entries(d._raw)
+        .map(([k, v]) => `
+          <div class="tt-row">
+            <span class="tt-key">${k}</span>
+            <span class="tt-val">${v ?? '—'}</span>
+          </div>`)
+        .join('');
+      el.innerHTML = `<div class="tt-header">${d.company}</div><div class="tt-body">${rows}</div>`;
+      el.style.display = 'block';
+      reposition(event);
+    };
+
+    const move = (event) => { if (el.style.display !== 'none') reposition(event); };
+    const hide = ()       => { el.style.display = 'none'; };
+
+    return { show, move, hide };
+  })();
+
+
+  // ── Scales ────────────────────────────────────────────────────────────────
+
+  const makeScales = (data, w, h) => {
+    const revMax             = d3.max(data, d => d.rev);
+    const [aoiMin, aoiMax]   = d3.extent(data, d => d.aoi);
+    const empMax             = d3.max(data, d => d.emp);
+    const cats               = [...new Set(data.map(d => d.category))].sort();
+    const aoiPad             = (aoiMax - aoiMin) * 0.14 || 1;
+
+    return {
+      x:     d3.scaleLinear().domain([0, revMax * 1.12]).range([0, w]).nice(),
+      y:     d3.scaleLinear().domain([aoiMin - aoiPad, aoiMax + aoiPad]).range([h, 0]).nice(),
+      size:  d3.scaleSqrt().domain([0, empMax]).range([CONFIG.minRadius, CONFIG.maxRadius]),
+      color: d3.scaleOrdinal().domain(cats).range(CONFIG.colors),
+      cats,
+    };
+  };
+
+
+  // ── Grid ──────────────────────────────────────────────────────────────────
+
+  const renderGrid = (g, scales, w, h) => {
+    const style = (gr) =>
+      gr.call(a => a.select('.domain').remove())
+        .call(a => a.selectAll('.tick line').attr('stroke', '#f1f5f9').attr('stroke-width', 1));
+
+    g.append('g').attr('class', 'grid')
+      .call(d3.axisLeft(scales.y).ticks(5).tickSize(-w).tickFormat(''))
+      .call(style);
+
+    g.append('g').attr('class', 'grid').attr('transform', `translate(0,${h})`)
+      .call(d3.axisBottom(scales.x).ticks(6).tickSize(-h).tickFormat(''))
+      .call(style);
+  };
+
+
+  // ── Axes ──────────────────────────────────────────────────────────────────
+
+  const renderAxes = (g, scales, w, h) => {
+    const styleAxis = (ax) =>
+      ax.call(a => a.select('.domain').attr('stroke', '#e2e8f0'))
+        .call(a => a.selectAll('.tick line').attr('stroke', '#e2e8f0'))
+        .call(a => a.selectAll('text').attr('fill', '#64748b').style('font-size', '11.5px'));
+
+    g.append('g').attr('transform', `translate(0,${h})`)
+      .call(d3.axisBottom(scales.x).ticks(6).tickFormat(d => `$${d}B`))
+      .call(styleAxis);
+
+    g.append('g')
+      .call(d3.axisLeft(scales.y).ticks(5).tickFormat(d => `$${d}B`))
+      .call(styleAxis);
+
+    // Zero line (only when AOI spans negative → positive)
+    const [yMin, yMax] = scales.y.domain();
+    if (yMin < 0 && yMax > 0) {
+      g.append('line')
+        .attr('x1', 0).attr('x2', w)
+        .attr('y1', scales.y(0)).attr('y2', scales.y(0))
+        .attr('stroke', '#94a3b8')
+        .attr('stroke-width', 1)
+        .attr('stroke-dasharray', '5,3');
+    }
+
+    g.append('text').attr('class', 'axis-label')
+      .attr('x', w / 2).attr('y', h + 56)
+      .attr('text-anchor', 'middle')
+      .text('Revenue (B USD)');
+
+    g.append('text').attr('class', 'axis-label')
+      .attr('transform', 'rotate(-90)')
+      .attr('x', -h / 2).attr('y', -64)
+      .attr('text-anchor', 'middle')
+      .text('AOI (B USD)');
+  };
+
+
+  // ── Bubbles ───────────────────────────────────────────────────────────────
+
+  const renderBubbles = (g, data, scales) => {
+    const group = g.append('g').attr('class', 'bubbles');
+
+    // Circles
+    group.selectAll('circle.bubble')
+      .data(data, d => d.company)
+      .join('circle')
+        .attr('class', 'bubble')
+        .attr('cx', d => scales.x(d.rev))
+        .attr('cy', d => scales.y(d.aoi))
+        .attr('r', 0)
+        .attr('fill', d => scales.color(d.category))
+        .attr('fill-opacity', CONFIG.opacity)
+        .attr('stroke', CONFIG.stroke)
+        .attr('stroke-width', CONFIG.strokeW)
+        .style('cursor', 'pointer')
+        .on('mouseover', (event, d) => {
+          d3.select(event.currentTarget).raise()
+            .transition().duration(80)
+            .attr('stroke-width', 2.5)
+            .attr('fill-opacity', 0.78);
+          Tooltip.show(event, d);
+        })
+        .on('mousemove', (event) => Tooltip.move(event))
+        .on('mouseout',  (event) => {
+          d3.select(event.currentTarget)
+            .transition().duration(120)
+            .attr('stroke-width', CONFIG.strokeW)
+            .attr('fill-opacity', CONFIG.opacity);
+          Tooltip.hide();
+        })
+      .transition().duration(CONFIG.transition).delay((_, i) => i * 10)
+        .attr('r', d => scales.size(d.emp));
+
+    // Labels — only for bubbles large enough to hold text
+    group.selectAll('text.bubble-label')
+      .data(data.filter(d => scales.size(d.emp) >= 16), d => d.company)
+      .join('text')
+        .attr('class', 'bubble-label')
+        .attr('x', d => scales.x(d.rev))
+        .attr('y', d => scales.y(d.aoi))
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'middle')
+        .attr('fill', '#ffffff')
+        .style('font-size', d => `${Math.min(11, scales.size(d.emp) * 0.28)}px`)
+        .style('font-weight', '600')
+        .style('pointer-events', 'none')
+        .style('opacity', 0)
+        .text(d => d.company)
+      .transition().duration(CONFIG.transition / 2)
+        .delay((_, i) => CONFIG.transition * 0.7 + i * 8)
+        .style('opacity', 1);
+  };
+
+
+  // ── Legend ────────────────────────────────────────────────────────────────
+
+  const renderLegend = (cats, colorScale) => {
+    document.getElementById('legend').innerHTML = cats
+      .map(cat => `
+        <div class="legend-item">
+          <span class="legend-swatch" style="background:${colorScale(cat)}"></span>
+          <span>${cat}</span>
+        </div>`)
+      .join('');
+  };
+
+
+  // ── Chart ─────────────────────────────────────────────────────────────────
+
+  let _currentData = null;
+
+  const renderChart = (data) => {
+    _currentData = data;
+
+    const svgEl  = document.getElementById('chart');
+    const contW  = svgEl.parentElement.clientWidth - 48; // subtract card padding
+    const totalW = Math.max(540, contW);
+    const totalH = Math.max(420, totalW * 0.56);
+    const { margin } = CONFIG;
+    const w = totalW - margin.left - margin.right;
+    const h = totalH - margin.top  - margin.bottom;
+
+    d3.select(svgEl).selectAll('*').remove();
+    d3.select(svgEl)
+      .attr('width',   totalW)
+      .attr('height',  totalH)
+      .attr('viewBox', `0 0 ${totalW} ${totalH}`);
+
+    const g      = d3.select(svgEl).append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+    const scales = makeScales(data, w, h);
+
+    renderGrid(g, scales, w, h);
+    renderAxes(g, scales, w, h);
+    renderBubbles(g, data, scales);
+    renderLegend(scales.cats, scales.color);
+  };
+
+  // Re-render on resize (debounced)
+  let _resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(() => { if (_currentData) renderChart(_currentData); }, 220);
+  });
+
+
+  // ── Upload ────────────────────────────────────────────────────────────────
+
+  const Upload = (() => {
+    const zone  = document.getElementById('upload-zone');
+    const input = document.getElementById('file-input');
+    const errEl = document.getElementById('upload-error');
+
+    const showError = (msg) => { errEl.textContent = msg; errEl.style.display = 'block'; };
+    const clearErr  = ()    => { errEl.style.display = 'none'; };
+
+    const process = (file, onData) => {
+      clearErr();
+      if (!file.name.toLowerCase().endsWith('.csv')) {
+        showError('Please upload a .csv file.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onerror = () => showError('Could not read the file. Please try again.');
+      reader.onload  = ({ target }) => {
+        const raw  = d3.csvParse(target.result);
+        const data = parseData(raw);
+        if (!data.length) {
+          showError('No plottable rows found. Verify the CSV has numeric values for Rev (B), AOI (B), and Emp (K).');
+          return;
+        }
+        document.getElementById('upload-section').style.display   = 'none';
+        document.getElementById('chart-container').style.display  = 'block';
+        // rAF ensures the container is laid out before we read clientWidth
+        requestAnimationFrame(() => onData(data));
+      };
+      reader.readAsText(file);
+    };
+
+    const init = (onData) => {
+      zone.addEventListener('click',    () => input.click());
+      zone.addEventListener('keydown',  (e) => { if (e.key === 'Enter' || e.key === ' ') input.click(); });
+      zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
+      zone.addEventListener('dragleave',()  => zone.classList.remove('drag-over'));
+      zone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        zone.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file) process(file, onData);
+      });
+      input.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) process(file, onData);
+        input.value = ''; // reset so same file can be re-uploaded
+      });
+      document.getElementById('reload-btn').addEventListener('click', () => {
+        document.getElementById('upload-section').style.display  = 'block';
+        document.getElementById('chart-container').style.display = 'none';
+        clearErr();
+      });
+    };
+
+    return { init };
+  })();
+
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  Upload.init(renderChart);
+  </script>
+</body>
+</html>
