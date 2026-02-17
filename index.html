@@ -57,9 +57,9 @@
       background: #eff6ff;
     }
 
-    .upload-icon     { color: var(--text-subtle); margin: 0 auto 14px; display: block; }
-    .upload-primary  { font-size: 15px; font-weight: 500; }
-    .upload-secondary{ font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+    .upload-icon      { color: var(--text-subtle); margin: 0 auto 14px; display: block; }
+    .upload-primary   { font-size: 15px; font-weight: 500; }
+    .upload-secondary { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
     .upload-hint {
       display: inline-block;
       margin-top: 14px;
@@ -82,16 +82,18 @@
       border-radius: 6px;
     }
 
-    /* ── Chart container ────────────────────────────── */
-    #chart-container {
+    /* ── Chart card ─────────────────────────────────── */
+    .chart-card {
       display: none;
-      margin-top: 32px;
+      margin-top: 24px;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
       padding: 24px;
     }
+
+    .chart-card:first-of-type { margin-top: 32px; }
 
     .chart-header {
       display: flex;
@@ -118,7 +120,7 @@
     .btn-ghost:hover { border-color: var(--text-muted); color: var(--text); }
 
     /* ── Legend ─────────────────────────────────────── */
-    #legend {
+    .legend {
       display: flex;
       flex-wrap: wrap;
       gap: 6px 16px;
@@ -128,7 +130,7 @@
     .legend-item   { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text-muted); }
     .legend-swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; opacity: .85; }
 
-    #chart { display: block; width: 100%; overflow: visible; }
+    .chart-svg { display: block; width: 100%; overflow: visible; }
 
     /* ── Tooltip ────────────────────────────────────── */
     #tooltip {
@@ -166,7 +168,7 @@
     .tt-key { color: var(--text-muted); }
     .tt-val { font-weight: 500; text-align: right; word-break: break-word; }
 
-    /* ── D3 axis/grid helpers ───────────────────────── */
+    /* ── D3 axis helpers ─────────────────────────────── */
     .axis-label { font-size: 12.5px; fill: #475569; }
   </style>
 </head>
@@ -193,7 +195,8 @@
       <input type="file" id="file-input" accept=".csv" style="display:none" aria-hidden="true">
     </div>
 
-    <div id="chart-container">
+    <!-- Chart 1: Revenue vs. AOI -->
+    <div id="chart-container-1" class="chart-card">
       <div class="chart-header">
         <div>
           <p class="chart-title">Revenue vs. AOI</p>
@@ -201,8 +204,20 @@
         </div>
         <button class="btn-ghost" id="reload-btn">Upload new file</button>
       </div>
-      <div id="legend" aria-label="Category legend"></div>
-      <svg id="chart" role="img" aria-label="Bubble chart of company revenue versus AOI"></svg>
+      <div id="legend-1" class="legend" aria-label="Category legend"></div>
+      <svg id="chart-1" class="chart-svg" role="img" aria-label="Bubble chart: Revenue vs. AOI"></svg>
+    </div>
+
+    <!-- Chart 2: Revenue per Employee vs. AOI per Employee -->
+    <div id="chart-container-2" class="chart-card">
+      <div class="chart-header">
+        <div>
+          <p class="chart-title">Revenue per Employee vs. AOI per Employee</p>
+          <p class="chart-subtitle">Bubble size = Employees (K) &nbsp;·&nbsp; Color = Category</p>
+        </div>
+      </div>
+      <div id="legend-2" class="legend" aria-label="Category legend"></div>
+      <svg id="chart-2" class="chart-svg" role="img" aria-label="Bubble chart: Rev/Emp vs. AOI/Emp"></svg>
     </div>
   </div>
 
@@ -315,17 +330,20 @@
 
   // ── Scales ────────────────────────────────────────────────────────────────
 
-  const makeScales = (data, w, h) => {
-    const revMax             = d3.max(data, d => d.rev);
-    const [aoiMin, aoiMax]   = d3.extent(data, d => d.aoi);
-    const empMax             = d3.max(data, d => d.emp);
-    const cats               = [...new Set(data.map(d => d.category))].sort();
-    const aoiPad             = (aoiMax - aoiMin) * 0.14 || 1;
+  /**
+   * @param {{ xAcc, yAcc, sizeAcc }} accessors — data accessor functions
+   */
+  const makeScales = (data, w, h, { xAcc, yAcc, sizeAcc }) => {
+    const xMax           = d3.max(data, xAcc);
+    const [yMin, yMax]   = d3.extent(data, yAcc);
+    const sizeMax        = d3.max(data, sizeAcc);
+    const cats           = [...new Set(data.map(d => d.category))].sort();
+    const yPad           = (yMax - yMin) * 0.14 || 1;
 
     return {
-      x:     d3.scaleLinear().domain([0, revMax * 1.12]).range([0, w]).nice(),
-      y:     d3.scaleLinear().domain([aoiMin - aoiPad, aoiMax + aoiPad]).range([h, 0]).nice(),
-      size:  d3.scaleSqrt().domain([0, empMax]).range([CONFIG.minRadius, CONFIG.maxRadius]),
+      x:     d3.scaleLinear().domain([0, xMax * 1.12]).range([0, w]).nice(),
+      y:     d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).range([h, 0]).nice(),
+      size:  d3.scaleSqrt().domain([0, sizeMax]).range([CONFIG.minRadius, CONFIG.maxRadius]),
       color: d3.scaleOrdinal().domain(cats).range(CONFIG.colors),
       cats,
     };
@@ -351,21 +369,24 @@
 
   // ── Axes ──────────────────────────────────────────────────────────────────
 
-  const renderAxes = (g, scales, w, h) => {
+  /**
+   * @param {{ xLabel, yLabel, xTickFmt, yTickFmt }} labels
+   */
+  const renderAxes = (g, scales, w, h, { xLabel, yLabel, xTickFmt, yTickFmt }) => {
     const styleAxis = (ax) =>
       ax.call(a => a.select('.domain').attr('stroke', '#e2e8f0'))
         .call(a => a.selectAll('.tick line').attr('stroke', '#e2e8f0'))
         .call(a => a.selectAll('text').attr('fill', '#64748b').style('font-size', '11.5px'));
 
     g.append('g').attr('transform', `translate(0,${h})`)
-      .call(d3.axisBottom(scales.x).ticks(6).tickFormat(d => `$${d}B`))
+      .call(d3.axisBottom(scales.x).ticks(6).tickFormat(xTickFmt))
       .call(styleAxis);
 
     g.append('g')
-      .call(d3.axisLeft(scales.y).ticks(5).tickFormat(d => `$${d}B`))
+      .call(d3.axisLeft(scales.y).ticks(5).tickFormat(yTickFmt))
       .call(styleAxis);
 
-    // Zero line (only when AOI spans negative → positive)
+    // Zero line — only when y domain spans negative → positive
     const [yMin, yMax] = scales.y.domain();
     if (yMin < 0 && yMax > 0) {
       g.append('line')
@@ -379,19 +400,22 @@
     g.append('text').attr('class', 'axis-label')
       .attr('x', w / 2).attr('y', h + 56)
       .attr('text-anchor', 'middle')
-      .text('Revenue (B USD)');
+      .text(xLabel);
 
     g.append('text').attr('class', 'axis-label')
       .attr('transform', 'rotate(-90)')
       .attr('x', -h / 2).attr('y', -64)
       .attr('text-anchor', 'middle')
-      .text('AOI (B USD)');
+      .text(yLabel);
   };
 
 
   // ── Bubbles ───────────────────────────────────────────────────────────────
 
-  const renderBubbles = (g, data, scales) => {
+  /**
+   * @param {{ xAcc, yAcc, sizeAcc }} accessors — data accessor functions
+   */
+  const renderBubbles = (g, data, scales, { xAcc, yAcc, sizeAcc }) => {
     const group = g.append('g').attr('class', 'bubbles');
 
     // Circles
@@ -399,8 +423,8 @@
       .data(data, d => d.company)
       .join('circle')
         .attr('class', 'bubble')
-        .attr('cx', d => scales.x(d.rev))
-        .attr('cy', d => scales.y(d.aoi))
+        .attr('cx', d => scales.x(xAcc(d)))
+        .attr('cy', d => scales.y(yAcc(d)))
         .attr('r', 0)
         .attr('fill', d => scales.color(d.category))
         .attr('fill-opacity', CONFIG.opacity)
@@ -423,19 +447,19 @@
           Tooltip.hide();
         })
       .transition().duration(CONFIG.transition).delay((_, i) => i * 10)
-        .attr('r', d => scales.size(d.emp));
+        .attr('r', d => scales.size(sizeAcc(d)));
 
     // Labels — only for bubbles large enough to hold text
     group.selectAll('text.bubble-label')
-      .data(data.filter(d => scales.size(d.emp) >= 16), d => d.company)
+      .data(data.filter(d => scales.size(sizeAcc(d)) >= 16), d => d.company)
       .join('text')
         .attr('class', 'bubble-label')
-        .attr('x', d => scales.x(d.rev))
-        .attr('y', d => scales.y(d.aoi))
+        .attr('x', d => scales.x(xAcc(d)))
+        .attr('y', d => scales.y(yAcc(d)))
         .attr('text-anchor', 'middle')
         .attr('dominant-baseline', 'middle')
         .attr('fill', '#ffffff')
-        .style('font-size', d => `${Math.min(11, scales.size(d.emp) * 0.28)}px`)
+        .style('font-size', d => `${Math.min(11, scales.size(sizeAcc(d)) * 0.28)}px`)
         .style('font-weight', '600')
         .style('pointer-events', 'none')
         .style('opacity', 0)
@@ -448,8 +472,8 @@
 
   // ── Legend ────────────────────────────────────────────────────────────────
 
-  const renderLegend = (cats, colorScale) => {
-    document.getElementById('legend').innerHTML = cats
+  const renderLegend = (cats, colorScale, legendId) => {
+    document.getElementById(legendId).innerHTML = cats
       .map(cat => `
         <div class="legend-item">
           <span class="legend-swatch" style="background:${colorScale(cat)}"></span>
@@ -461,13 +485,37 @@
 
   // ── Chart ─────────────────────────────────────────────────────────────────
 
-  let _currentData = null;
+  /**
+   * @param {object} opts
+   * @param {string}   opts.svgId       — target <svg> element ID
+   * @param {string}   opts.legendId    — target legend element ID
+   * @param {function} opts.xAcc        — x-axis data accessor
+   * @param {function} opts.yAcc        — y-axis data accessor
+   * @param {function} opts.sizeAcc     — bubble size data accessor
+   * @param {string}   opts.xLabel      — x-axis label text
+   * @param {string}   opts.yLabel      — y-axis label text
+   * @param {function} opts.xTickFmt    — d3 tick formatter for x-axis
+   * @param {function} opts.yTickFmt    — d3 tick formatter for y-axis
+   */
+  const renderChart = (data, opts) => {
+    const {
+      svgId,
+      legendId,
+      xAcc,
+      yAcc,
+      sizeAcc,
+      xLabel,
+      yLabel,
+      xTickFmt,
+      yTickFmt,
+    } = opts;
 
-  const renderChart = (data) => {
-    _currentData = data;
+    // Store for resize
+    _renders = _renders.filter(r => r.opts.svgId !== svgId);
+    _renders.push({ data, opts });
 
-    const svgEl  = document.getElementById('chart');
-    const contW  = svgEl.parentElement.clientWidth - 48; // subtract card padding
+    const svgEl  = document.getElementById(svgId);
+    const contW  = svgEl.parentElement.clientWidth - 48;
     const totalW = Math.max(540, contW);
     const totalH = Math.max(420, totalW * 0.56);
     const { margin } = CONFIG;
@@ -480,21 +528,56 @@
       .attr('height',  totalH)
       .attr('viewBox', `0 0 ${totalW} ${totalH}`);
 
-    const g      = d3.select(svgEl).append('g').attr('transform', `translate(${margin.left},${margin.top})`);
-    const scales = makeScales(data, w, h);
+    const g         = d3.select(svgEl).append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+    const accessors = { xAcc, yAcc, sizeAcc };
+    const scales    = makeScales(data, w, h, accessors);
 
     renderGrid(g, scales, w, h);
-    renderAxes(g, scales, w, h);
-    renderBubbles(g, data, scales);
-    renderLegend(scales.cats, scales.color);
+    renderAxes(g, scales, w, h, { xLabel, yLabel, xTickFmt, yTickFmt });
+    renderBubbles(g, data, scales, accessors);
+    renderLegend(scales.cats, scales.color, legendId);
   };
 
-  // Re-render on resize (debounced)
+  // Re-render all charts on resize (debounced)
+  let _renders     = [];
   let _resizeTimer;
   window.addEventListener('resize', () => {
     clearTimeout(_resizeTimer);
-    _resizeTimer = setTimeout(() => { if (_currentData) renderChart(_currentData); }, 220);
+    _resizeTimer = setTimeout(() => {
+      _renders.forEach(({ data, opts }) => renderChart(data, opts));
+    }, 220);
   });
+
+
+  // ── Chart Definitions ─────────────────────────────────────────────────────
+
+  const fmtB  = (d) => `$${d}B`;
+  const fmtM  = (d) => `$${d3.format('.3~g')(d)}M`;
+
+  const CHARTS = [
+    {
+      svgId:    'chart-1',
+      legendId: 'legend-1',
+      xAcc:     d => d.rev,
+      yAcc:     d => d.aoi,
+      sizeAcc:  d => d.emp,
+      xLabel:   'Revenue (B USD)',
+      yLabel:   'AOI (B USD)',
+      xTickFmt: fmtB,
+      yTickFmt: fmtB,
+    },
+    {
+      svgId:    'chart-2',
+      legendId: 'legend-2',
+      xAcc:     d => d.rev / d.emp,
+      yAcc:     d => d.aoi / d.emp,
+      sizeAcc:  d => d.emp,
+      xLabel:   'Rev / Emp (M USD)',
+      yLabel:   'AOI / Emp (M USD)',
+      xTickFmt: fmtM,
+      yTickFmt: fmtM,
+    },
+  ];
 
 
   // ── Upload ────────────────────────────────────────────────────────────────
@@ -506,6 +589,9 @@
 
     const showError = (msg) => { errEl.textContent = msg; errEl.style.display = 'block'; };
     const clearErr  = ()    => { errEl.style.display = 'none'; };
+
+    const showCharts  = () => document.querySelectorAll('.chart-card').forEach(el => el.style.display = 'block');
+    const hideCharts  = () => document.querySelectorAll('.chart-card').forEach(el => el.style.display = 'none');
 
     const process = (file, onData) => {
       clearErr();
@@ -522,9 +608,9 @@
           showError('No plottable rows found. Verify the CSV has numeric values for Rev (B), AOI (B), and Emp (K).');
           return;
         }
-        document.getElementById('upload-section').style.display   = 'none';
-        document.getElementById('chart-container').style.display  = 'block';
-        // rAF ensures the container is laid out before we read clientWidth
+        document.getElementById('upload-section').style.display = 'none';
+        showCharts();
+        // rAF ensures containers are laid out before we read clientWidth
         requestAnimationFrame(() => onData(data));
       };
       reader.readAsText(file);
@@ -544,11 +630,12 @@
       input.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (file) process(file, onData);
-        input.value = ''; // reset so same file can be re-uploaded
+        input.value = '';
       });
       document.getElementById('reload-btn').addEventListener('click', () => {
-        document.getElementById('upload-section').style.display  = 'block';
-        document.getElementById('chart-container').style.display = 'none';
+        document.getElementById('upload-section').style.display = 'block';
+        hideCharts();
+        _renders = [];
         clearErr();
       });
     };
@@ -558,7 +645,7 @@
 
 
   // ── Init ──────────────────────────────────────────────────────────────────
-  Upload.init(renderChart);
+  Upload.init((data) => CHARTS.forEach(opts => renderChart(data, opts)));
   </script>
 </body>
 </html>
