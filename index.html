@@ -313,25 +313,30 @@
     if (!rows.length) return [];
     const keys = Object.keys(rows[0]);
     const C = {
-      company:  findCol(keys, 'company', 'company name', 'name', 'ticker'),
-      category: findCol(keys, 'category', 'sector', 'industry', 'segment', 'type'),
-      color:    findCol(keys, 'color', 'colour', 'fill', 'hex', 'color code'),
-      health:   findCol(keys, 'health', 'healthy', 'is healthy', 'is_healthy'),
-      rev:      findCol(keys, 'rev (b)', 'rev(b)', 'revenue (b)', 'revenue(b)', 'revenue', 'rev'),
-      aoi:      findCol(keys, 'aoi (b)', 'aoi(b)', 'aoi'),
-      emp:      findCol(keys, 'emp (k)', 'emp(k)', 'employees (k)', 'employees(k)', 'employees', 'emp'),
+      company:   findCol(keys, 'company', 'company name', 'name', 'ticker'),
+      category:  findCol(keys, 'category', 'sector', 'industry', 'segment', 'type'),
+      color:     findCol(keys, 'color', 'colour', 'fill', 'hex', 'color code'),
+      health:    findCol(keys, 'health', 'healthy', 'is healthy', 'is_healthy'),
+      rev:       findCol(keys, 'rev (b)', 'rev(b)', 'revenue (b)', 'revenue(b)', 'revenue', 'rev'),
+      aoi:       findCol(keys, 'aoi (b)', 'aoi(b)', 'aoi'),
+      emp:       findCol(keys, 'emp (k)', 'emp(k)', 'employees (k)', 'employees(k)', 'employees', 'emp'),
+      revPerEmp: findCol(keys, 'rev/emp (m)', 'rev/emp(m)', 'rev per emp (m)', 'revenue per employee (m)'),
+      aoiPerEmp: findCol(keys, 'aoi/emp (m)', 'aoi/emp(m)', 'aoi per emp (m)', 'aoi per employee (m)'),
     };
 
     return rows
       .map(r => ({
-        company:  C.company  ? String(r[C.company]  ?? '').trim() || '—' : '—',
-        category: C.category ? String(r[C.category] ?? '').trim() || 'Unknown' : 'Unknown',
-        color:    C.color    ? String(r[C.color]    ?? '').trim() || null : null,
-        health:   C.health   ? /^(yes|y|true|1)$/i.test(String(r[C.health] ?? '').trim()) : false,
-        rev:      parseNumber(C.rev ? r[C.rev] : null),
-        aoi:      parseNumber(C.aoi ? r[C.aoi] : null),
-        emp:      parseNumber(C.emp ? r[C.emp] : null),
-        _raw:     r,
+        company:   C.company   ? String(r[C.company]   ?? '').trim() || '—' : '—',
+        category:  C.category  ? String(r[C.category]  ?? '').trim() || 'Unknown' : 'Unknown',
+        color:     C.color     ? String(r[C.color]     ?? '').trim() || null : null,
+        // Default health to true when no Health column (all bubbles styled as healthy)
+        health:    C.health    ? /^(yes|y|true|1)$/i.test(String(r[C.health] ?? '').trim()) : true,
+        rev:       parseNumber(C.rev       ? r[C.rev]       : null),
+        aoi:       parseNumber(C.aoi       ? r[C.aoi]       : null),
+        emp:       parseNumber(C.emp       ? r[C.emp]       : null),
+        revPerEmp: parseNumber(C.revPerEmp ? r[C.revPerEmp] : null),
+        aoiPerEmp: parseNumber(C.aoiPerEmp ? r[C.aoiPerEmp] : null),
+        _raw:      r,
       }))
       .filter(d => d.rev != null && d.aoi != null && d.emp != null && d.emp > 0);
   };
@@ -353,11 +358,18 @@
 
   /** Build a getColor(d) function from the data set. Uses CSV color column if
    *  present, otherwise falls back to a D3 ordinal scale keyed by category. */
+  // 20-color palette — handles datasets with many categories
+  const PALETTE = [
+    ...d3.schemeTableau10,
+    '#499894', '#86bcb6', '#d4a6c8', '#f0e442', '#8fbc8f',
+    '#cd853f', '#4682b4', '#da70d6', '#3cb371', '#ff7f50',
+  ];
+
   const makeColorAccessor = (data) => {
     const hasColorCol = data.some(d => d.color !== null);
     if (hasColorCol) return d => d.color || CONFIG.fallbackColor;
-    const cats   = [...new Set(data.map(d => d.category))].sort();
-    const ordinal = d3.scaleOrdinal().domain(cats).range(d3.schemeTableau10);
+    const cats    = [...new Set(data.map(d => d.category))].sort();
+    const ordinal = d3.scaleOrdinal().domain(cats).range(PALETTE);
     return d => ordinal(d.category);
   };
 
@@ -614,8 +626,9 @@
     },
     {
       svgId:    'chart-2',
-      xAcc:     d => d.rev / d.emp,
-      yAcc:     d => d.aoi / d.emp,
+      // Use pre-computed CSV columns when available; fall back to division
+      xAcc:     d => d.revPerEmp ?? (d.rev / d.emp),
+      yAcc:     d => d.aoiPerEmp ?? (d.aoi / d.emp),
       sizeAcc:  d => d.emp,
       xLabel:   'Rev / Emp (M USD)',
       yLabel:   'AOI / Emp (M USD)',
