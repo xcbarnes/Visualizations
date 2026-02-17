@@ -276,7 +276,7 @@
 
   // ── Config ────────────────────────────────────────────────────────────────
   const CONFIG = {
-    margin:       { top: 24, right: 32, bottom: 72, left: 82 },
+    margin:       { top: 24, right: 32, bottom: 88, left: 82 },
     minRadius:    5,
     maxRadius:    72,
     strokeW:      1,
@@ -447,18 +447,35 @@
   // ── Axes ──────────────────────────────────────────────────────────────────
 
   const renderAxes = (g, scales, w, h, { xLabel, yLabel, xTickFmt, yTickFmt }) => {
-    const styleAxis = ax =>
+    const styleYAxis = ax =>
       ax.call(a => a.select('.domain').attr('stroke', '#e2e8f0'))
         .call(a => a.selectAll('.tick line').attr('stroke', '#e2e8f0'))
         .call(a => a.selectAll('text').attr('fill', '#64748b').style('font-size', '11.5px'));
 
+    const styleXAxis = ax =>
+      ax.call(a => a.select('.domain').attr('stroke', '#e2e8f0'))
+        .call(a => a.selectAll('.tick line').attr('stroke', '#e2e8f0'))
+        .call(a => a.selectAll('text')
+          .attr('fill', '#64748b')
+          .style('font-size', '11px')
+          .attr('text-anchor', 'end')
+          .attr('dx', '-0.5em')
+          .attr('dy', '0.4em')
+          .attr('transform', 'rotate(-40)'));
+
+    // Use only power-of-10 ticks on x to avoid crowding
+    const [xMin, xMax] = scales.x.domain();
+    const lo = Math.ceil(Math.log10(xMin));
+    const hi = Math.floor(Math.log10(xMax));
+    const xTickVals = d3.range(lo, hi + 1).map(e => Math.pow(10, e));
+
     g.append('g').attr('transform', `translate(0,${h})`)
-      .call(d3.axisBottom(scales.x).ticks(5).tickFormat(xTickFmt))
-      .call(styleAxis);
+      .call(d3.axisBottom(scales.x).tickValues(xTickVals).tickFormat(xTickFmt))
+      .call(styleXAxis);
 
     g.append('g')
       .call(d3.axisLeft(scales.y).ticks(5).tickFormat(yTickFmt))
-      .call(styleAxis);
+      .call(styleYAxis);
 
     // Zero-equivalent line: draw at the log floor of y if any values were clamped
     const [yMin] = scales.y.domain();
@@ -542,15 +559,13 @@
   // ── Key ───────────────────────────────────────────────────────────────────
 
   const buildColorMap = (data, getColor) => {
-    const map = new Map(); // color → Set<category>
+    const map = new Map(); // category → first color seen
     for (const d of data) {
-      const c   = getColor(d);
       const cat = d.category || 'Unknown';
-      if (!map.has(c)) map.set(c, new Set());
-      map.get(c).add(cat);
+      if (!map.has(cat)) map.set(cat, getColor(d));
     }
     return [...map.entries()]
-      .map(([color, cats]) => ({ color, label: cats.size === 1 ? [...cats][0] : 'Else' }))
+      .map(([label, color]) => ({ color, label }))
       .sort((a, b) => a.label.localeCompare(b.label));
   };
 
