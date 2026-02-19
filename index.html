@@ -231,23 +231,23 @@
               <p class="guide-item-label">Outline</p>
               <svg viewBox="0 0 190 50" width="190" height="50" aria-hidden="true">
                 <circle cx="43" cy="21" r="16" fill="#64748b" fill-opacity=".5" stroke="#0f172a" stroke-width="1.5"/>
-                <text x="43"  y="48" text-anchor="middle" font-size="9.5" fill="#64748b">Health: Yes</text>
+                <text x="43"  y="48" text-anchor="middle" font-size="9.5" fill="#64748b">Health co.</text>
                 <rect x="90" y="1" width="84" height="40" rx="6" fill="#1e293b"/>
                 <circle cx="147" cy="21" r="16" fill="#64748b" fill-opacity=".5" stroke="#ffffff" stroke-width="1.5"/>
-                <text x="147" y="48" text-anchor="middle" font-size="9.5" fill="#64748b">Health: No</text>
+                <text x="147" y="48" text-anchor="middle" font-size="9.5" fill="#64748b">Other co.</text>
               </svg>
-              <p class="guide-item-desc">Black outline = Healthy (Yes). White outline = Not healthy (No).</p>
+              <p class="guide-item-desc">Black outline = Health sector company. White outline = All other companies.</p>
             </div>
 
             <div class="guide-item">
               <p class="guide-item-label">Fill Opacity</p>
               <svg viewBox="0 0 190 50" width="190" height="50" aria-hidden="true">
-                <circle cx="43"  cy="21" r="16" fill="#3b82f6" fill-opacity=".65" stroke="#ffffff" stroke-width="1.5"/>
-                <text x="43"  y="48" text-anchor="middle" font-size="9.5" fill="#64748b">Health: Yes</text>
-                <circle cx="147" cy="21" r="16" fill="#3b82f6" fill-opacity=".20" stroke="#0f172a" stroke-width="1.5"/>
-                <text x="147" y="48" text-anchor="middle" font-size="9.5" fill="#64748b">Health: No</text>
+                <circle cx="43"  cy="21" r="16" fill="#3b82f6" fill-opacity=".65" stroke="#0f172a" stroke-width="1.5"/>
+                <text x="43"  y="48" text-anchor="middle" font-size="9.5" fill="#64748b">Health co.</text>
+                <circle cx="147" cy="21" r="16" fill="#3b82f6" fill-opacity=".20" stroke="#ffffff" stroke-width="1.5"/>
+                <text x="147" y="48" text-anchor="middle" font-size="9.5" fill="#64748b">Other co.</text>
               </svg>
-              <p class="guide-item-desc">More opaque = Healthy (Yes). More transparent = Not healthy (No).</p>
+              <p class="guide-item-desc">More opaque = Health sector company. More transparent = All other companies.</p>
             </div>
 
           </div>
@@ -418,8 +418,8 @@
     const sizeMax  = d3.max(data, sizeAcc);
 
     return {
-      x:       d3.scaleLog().domain([xExt[0] * 0.5, xExt[1] * 2]).range([0, w]).nice(),
-      y:       d3.scaleLog().domain([yExt[0] * 0.5, yExt[1] * 2]).range([h, 0]).nice(),
+      x:       d3.scaleLog().domain([xExt[0], xExt[1]]).range([0, w]).nice(),
+      y:       d3.scaleLog().domain([yExt[0], yExt[1]]).range([h, 0]).nice(),
       size:    d3.scaleSqrt().domain([0, sizeMax]).range([CONFIG.minRadius, CONFIG.maxRadius]),
       xFloor,
       yFloor,
