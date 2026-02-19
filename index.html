@@ -483,8 +483,8 @@
       .call(d3.axisLeft(scales.y).tickValues(yTickVals).tickFormat(yTickFmt))
       .call(styleYAxis);
 
-    // Zero-equivalent line: draw at the log floor of y if any values were clamped
-    const [yMin] = scales.y.domain();
+    // Zero-equivalent line at the log floor of y
+
     g.append('line')
       .attr('x1', 0).attr('x2', w)
       .attr('y1', scales.y(yMin)).attr('y2', scales.y(yMin))
