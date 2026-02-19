@@ -589,34 +589,29 @@
 
   // ── Chart ─────────────────────────────────────────────────────────────────
 
-  let _renders = [];
-  let _resizeTimer;
+  // Fixed logical coordinate space — CSS width:100% scales the SVG responsively.
+  // No re-render on resize needed; the viewBox handles it automatically.
+  const LOGICAL_W = 960;
+  const LOGICAL_H = Math.round(LOGICAL_W * 0.58);
 
   const renderChart = (data, opts) => {
     const { svgId, xAcc, yAcc, sizeAcc, xLabel, yLabel, xTickFmt, yTickFmt, opacityY, opacityN, getColor } = opts;
 
-    _renders = _renders.filter(r => r.opts.svgId !== svgId);
-    _renders.push({ data, opts });
-
-    const svgEl  = document.getElementById(svgId);
-    // Clear fixed dimensions so CSS width:100% governs the container measurement
-    d3.select(svgEl).attr('width', null).attr('height', null);
-    const contW  = svgEl.parentElement.clientWidth - 48;
-    const totalW = Math.max(540, contW);
-    const totalH = Math.max(420, totalW * 0.56);
     const { margin } = CONFIG;
-    const w = totalW - margin.left - margin.right;
-    const h = totalH - margin.top  - margin.bottom;
+    const w = LOGICAL_W - margin.left - margin.right;
+    const h = LOGICAL_H - margin.top  - margin.bottom;
 
+    const svgEl = document.getElementById(svgId);
     d3.select(svgEl).selectAll('*').remove();
     d3.select(svgEl)
-      .attr('width',   totalW)
-      .attr('height',  totalH)
-      .attr('viewBox', `0 0 ${totalW} ${totalH}`);
+      .attr('width',              '100%')
+      .attr('height',             null)
+      .attr('viewBox',            `0 0 ${LOGICAL_W} ${LOGICAL_H}`)
+      .attr('preserveAspectRatio','xMidYMid meet');
 
-    const g        = d3.select(svgEl).append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+    const g       = d3.select(svgEl).append('g').attr('transform', `translate(${margin.left},${margin.top})`);
     const accessors = { xAcc, yAcc, sizeAcc };
-    const scales   = makeScales(data, w, h, accessors);
+    const scales  = makeScales(data, w, h, accessors);
 
     // Health companies rendered last so they appear in front of all others
     const sorted = [...data].sort((a, b) => (a.health ? 1 : 0) - (b.health ? 1 : 0));
@@ -625,11 +620,6 @@
     renderAxes(g, scales, w, h, { xLabel, yLabel, xTickFmt, yTickFmt });
     renderBubbles(g, sorted, scales, { ...accessors, opacityY, opacityN, getColor });
   };
-
-  window.addEventListener('resize', () => {
-    clearTimeout(_resizeTimer);
-    _resizeTimer = setTimeout(() => _renders.forEach(({ data, opts }) => renderChart(data, opts)), 220);
-  });
 
 
   // ── Chart Definitions ─────────────────────────────────────────────────────
