@@ -473,8 +473,14 @@
       .call(d3.axisBottom(scales.x).tickValues(xTickVals).tickFormat(xTickFmt))
       .call(styleXAxis);
 
+    // Same power-of-10 strategy for Y axis
+    const [yMin, yMax] = scales.y.domain();
+    const ylo = Math.ceil(Math.log10(yMin));
+    const yhi = Math.floor(Math.log10(yMax));
+    const yTickVals = d3.range(ylo, yhi + 1).map(e => Math.pow(10, e));
+
     g.append('g')
-      .call(d3.axisLeft(scales.y).ticks(5).tickFormat(yTickFmt))
+      .call(d3.axisLeft(scales.y).tickValues(yTickVals).tickFormat(yTickFmt))
       .call(styleYAxis);
 
     // Zero-equivalent line: draw at the log floor of y if any values were clamped
@@ -593,6 +599,8 @@
     _renders.push({ data, opts });
 
     const svgEl  = document.getElementById(svgId);
+    // Clear fixed dimensions so CSS width:100% governs the container measurement
+    d3.select(svgEl).attr('width', null).attr('height', null);
     const contW  = svgEl.parentElement.clientWidth - 48;
     const totalW = Math.max(540, contW);
     const totalH = Math.max(420, totalW * 0.56);
@@ -610,9 +618,12 @@
     const accessors = { xAcc, yAcc, sizeAcc };
     const scales   = makeScales(data, w, h, accessors);
 
+    // Health companies rendered last so they appear in front of all others
+    const sorted = [...data].sort((a, b) => (a.health ? 1 : 0) - (b.health ? 1 : 0));
+
     renderGrid(g, scales, w, h);
     renderAxes(g, scales, w, h, { xLabel, yLabel, xTickFmt, yTickFmt });
-    renderBubbles(g, data, scales, { ...accessors, opacityY, opacityN, getColor });
+    renderBubbles(g, sorted, scales, { ...accessors, opacityY, opacityN, getColor });
   };
 
   window.addEventListener('resize', () => {
