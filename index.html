@@ -27,7 +27,7 @@
       min-height: 100vh;
     }
 
-    #app { max-width: 1140px; margin: 0 auto; padding: 40px 24px 64px; }
+    #app { max-width: 1140px; margin: 0 auto; padding: 28px 20px 28px; }
 
     /* ── Header ── */
     .page-title    { font-size: 22px; font-weight: 700; letter-spacing: -.3px; }
@@ -66,14 +66,14 @@
     /* ── Chart card ── */
     .chart-card {
       display: none;
-      margin-top: 24px;
+      margin-top: 16px;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
-      padding: 24px;
+      padding: 16px 20px;
     }
-    #chart-container-1 { margin-top: 32px; }
+    #chart-container-1 { margin-top: 24px; }
 
     .chart-header {
       display: flex; align-items: flex-start;
@@ -90,7 +90,7 @@
     }
     .btn-ghost:hover { border-color: var(--text-muted); color: var(--text); }
 
-    .chart-svg { display: block; width: 100%; overflow: visible; }
+    .chart-svg { display: block; overflow: visible; }
 
     /* ── Key panel ── */
     .key-inner {
@@ -589,25 +589,26 @@
 
   // ── Chart ─────────────────────────────────────────────────────────────────
 
-  // Fixed logical coordinate space — CSS width:100% scales the SVG responsively.
-  // No re-render on resize needed; the viewBox handles it automatically.
-  const LOGICAL_W = 960;
-  const LOGICAL_H = Math.round(LOGICAL_W * 0.58);
+  const ASPECT = 0.58; // height / width ratio
 
   const renderChart = (data, opts) => {
     const { svgId, xAcc, yAcc, sizeAcc, xLabel, yLabel, xTickFmt, yTickFmt, opacityY, opacityN, getColor } = opts;
 
-    const { margin } = CONFIG;
-    const w = LOGICAL_W - margin.left - margin.right;
-    const h = LOGICAL_H - margin.top  - margin.bottom;
-
     const svgEl = document.getElementById(svgId);
+    const card  = svgEl.closest('.chart-card');
+    const cs    = getComputedStyle(card);
+    const availW = Math.max(
+      card.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight),
+      320
+    );
+    const availH = Math.round(availW * ASPECT);
+
+    const { margin } = CONFIG;
+    const w = availW - margin.left - margin.right;
+    const h = availH - margin.top  - margin.bottom;
+
     d3.select(svgEl).selectAll('*').remove();
-    d3.select(svgEl)
-      .attr('width',              '100%')
-      .attr('height',             null)
-      .attr('viewBox',            `0 0 ${LOGICAL_W} ${LOGICAL_H}`)
-      .attr('preserveAspectRatio','xMidYMid meet');
+    d3.select(svgEl).attr('width', availW).attr('height', availH);
 
     const g       = d3.select(svgEl).append('g').attr('transform', `translate(${margin.left},${margin.top})`);
     const accessors = { xAcc, yAcc, sizeAcc };
@@ -703,8 +704,9 @@
         input.value = '';
       });
       document.getElementById('reload-btn').addEventListener('click', () => {
+        _currentData = null;
         document.getElementById('upload-section').style.display = 'block';
-        hideCards(); _renders = []; clearErr();
+        hideCards(); clearErr();
       });
     };
 
@@ -713,10 +715,25 @@
 
 
   // ── Init ──────────────────────────────────────────────────────────────────
+  let _currentData = null;
+  let _getColor    = null;
+  let _roTimer     = null;
+
+  // Re-render all charts when any chart card changes size (window resize, etc.)
+  const _ro = new ResizeObserver(() => {
+    if (!_currentData) return;
+    clearTimeout(_roTimer);
+    _roTimer = setTimeout(() => {
+      CHARTS.forEach(opts => renderChart(_currentData, { ...opts, getColor: _getColor }));
+    }, 80);
+  });
+  document.querySelectorAll('.chart-card').forEach(el => _ro.observe(el));
+
   Upload.init((data) => {
-    const getColor = makeColorAccessor(data);
-    renderKey(data, getColor);
-    CHARTS.forEach(opts => renderChart(data, { ...opts, getColor }));
+    _currentData = data;
+    _getColor    = makeColorAccessor(data);
+    renderKey(data, _getColor);
+    CHARTS.forEach(opts => renderChart(_currentData, { ...opts, getColor: _getColor }));
   });
   </script>
 </body>
