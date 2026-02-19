@@ -230,13 +230,13 @@
             <div class="guide-item">
               <p class="guide-item-label">Outline</p>
               <svg viewBox="0 0 190 50" width="190" height="50" aria-hidden="true">
-                <rect x="1" y="1" width="84" height="40" rx="6" fill="#1e293b"/>
-                <circle cx="43" cy="21" r="16" fill="#64748b" fill-opacity=".5" stroke="#ffffff" stroke-width="1.5"/>
+                <circle cx="43" cy="21" r="16" fill="#64748b" fill-opacity=".5" stroke="#0f172a" stroke-width="1.5"/>
                 <text x="43"  y="48" text-anchor="middle" font-size="9.5" fill="#64748b">Health: Yes</text>
-                <circle cx="147" cy="21" r="16" fill="#64748b" fill-opacity=".5" stroke="#0f172a" stroke-width="1.5"/>
+                <rect x="90" y="1" width="84" height="40" rx="6" fill="#1e293b"/>
+                <circle cx="147" cy="21" r="16" fill="#64748b" fill-opacity=".5" stroke="#ffffff" stroke-width="1.5"/>
                 <text x="147" y="48" text-anchor="middle" font-size="9.5" fill="#64748b">Health: No</text>
               </svg>
-              <p class="guide-item-desc">White outline = Healthy (Yes). Black outline = Not healthy (No).</p>
+              <p class="guide-item-desc">Black outline = Healthy (Yes). White outline = Not healthy (No).</p>
             </div>
 
             <div class="guide-item">
@@ -499,7 +499,7 @@
 
   const renderBubbles = (g, data, scales, { xAcc, yAcc, sizeAcc, opacityY, opacityN, getColor }) => {
     const opacity = d => d.health ? opacityY : opacityN;
-    const stroke  = d => d.health ? '#ffffff' : '#000000';
+    const stroke  = d => d.health ? '#000000' : '#ffffff';
     const cx      = d => scales.x(clampLog(xAcc(d), scales.xFloor));
     const cy      = d => scales.y(clampLog(yAcc(d), scales.yFloor));
 
