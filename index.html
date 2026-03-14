@@ -406,7 +406,7 @@
 
   // ── Scales ────────────────────────────────────────────────────────────────
 
-  const makeScales = (data, w, h, { xAcc, yAcc, sizeAcc }) => {
+  const makeScales = (data, w, h, { xAcc, yAcc, sizeAcc }, maxRadius) => {
     const xVals    = data.map(xAcc);
     const yVals    = data.map(yAcc);
     const xFloor   = posMin(xVals) * 0.1;
@@ -420,7 +420,7 @@
     return {
       x:       d3.scaleLog().domain([xExt[0], xExt[1]]).range([0, w]).nice(),
       y:       d3.scaleLog().domain([yExt[0], yExt[1]]).range([h, 0]).nice(),
-      size:    d3.scaleSqrt().domain([0, sizeMax]).range([CONFIG.minRadius, CONFIG.maxRadius]),
+      size:    d3.scaleSqrt().domain([0, sizeMax]).range([CONFIG.minRadius, maxRadius]),
       xFloor,
       yFloor,
     };
@@ -446,7 +446,7 @@
 
   // ── Axes ──────────────────────────────────────────────────────────────────
 
-  const renderAxes = (g, scales, w, h, { xLabel, yLabel, xTickFmt, yTickFmt }) => {
+  const renderAxes = (g, scales, w, h, { xLabel, yLabel, xTickFmt, yTickFmt }, margin) => {
     const styleYAxis = ax =>
       ax.call(a => a.select('.domain').attr('stroke', '#e2e8f0'))
         .call(a => a.selectAll('.tick line').attr('stroke', '#e2e8f0'))
@@ -491,12 +491,12 @@
       .attr('stroke', '#e2e8f0').attr('stroke-width', 1);
 
     g.append('text').attr('class', 'axis-label')
-      .attr('x', w / 2).attr('y', h + 56)
+      .attr('x', w / 2).attr('y', h + margin.bottom - 32)
       .attr('text-anchor', 'middle').text(xLabel);
 
     g.append('text').attr('class', 'axis-label')
       .attr('transform', 'rotate(-90)')
-      .attr('x', -h / 2).attr('y', -64)
+      .attr('x', -h / 2).attr('y', -(margin.left - 18))
       .attr('text-anchor', 'middle').text(yLabel);
   };
 
@@ -509,40 +509,51 @@
     const cx      = d => scales.x(clampLog(xAcc(d), scales.xFloor));
     const cy      = d => scales.y(clampLog(yAcc(d), scales.yFloor));
 
-    const group = g.append('g').attr('class', 'bubbles');
+    // Two sibling groups: others first, health second.
+    // Health group is always later in SVG order so health bubbles always
+    // render in front. .raise() on hover only promotes within its own group,
+    // so non-health bubbles can never escape below the health layer.
+    const groupOthers = g.append('g').attr('class', 'bubbles-others');
+    const groupHealth = g.append('g').attr('class', 'bubbles-health');
 
-    group.selectAll('circle.bubble')
-      .data(data, d => d.company)
-      .join('circle')
-        .attr('class', 'bubble')
-        .attr('cx', cx)
-        .attr('cy', cy)
-        .attr('r', 0)
-        .attr('fill', d => getColor(d))
-        .attr('fill-opacity', d => opacity(d))
-        .attr('stroke', d => stroke(d))
-        .attr('stroke-width', CONFIG.strokeW)
-        .style('cursor', 'pointer')
-        .on('mouseover', (event, d) => {
-          d3.select(event.currentTarget).raise()
-            .transition().duration(80)
-            .attr('stroke-width', 2.5)
-            .attr('fill-opacity', Math.min(opacity(d) + 0.15, 0.95));
-          Tooltip.show(event, d);
-        })
-        .on('mousemove', (event) => Tooltip.move(event))
-        .on('mouseout',  (event, d) => {
-          d3.select(event.currentTarget)
-            .transition().duration(120)
-            .attr('stroke-width', CONFIG.strokeW)
-            .attr('fill-opacity', opacity(d));
-          Tooltip.hide();
-        })
-      .transition().duration(CONFIG.transition).delay((_, i) => i * 10)
-        .attr('r', d => scales.size(sizeAcc(d)));
+    for (const [grp, subset] of [
+      [groupOthers, data.filter(d => !d.health)],
+      [groupHealth, data.filter(d =>  d.health)],
+    ]) {
+      grp.selectAll('circle.bubble')
+        .data(subset, d => d.company)
+        .join('circle')
+          .attr('class', 'bubble')
+          .attr('cx', cx)
+          .attr('cy', cy)
+          .attr('r', 0)
+          .attr('fill', d => getColor(d))
+          .attr('fill-opacity', d => opacity(d))
+          .attr('stroke', d => stroke(d))
+          .attr('stroke-width', CONFIG.strokeW)
+          .style('cursor', 'pointer')
+          .on('mouseover', (event, d) => {
+            d3.select(event.currentTarget).raise()
+              .transition().duration(80)
+              .attr('stroke-width', 2.5)
+              .attr('fill-opacity', Math.min(opacity(d) + 0.15, 0.95));
+            Tooltip.show(event, d);
+          })
+          .on('mousemove', (event) => Tooltip.move(event))
+          .on('mouseout',  (event, d) => {
+            d3.select(event.currentTarget)
+              .transition().duration(120)
+              .attr('stroke-width', CONFIG.strokeW)
+              .attr('fill-opacity', opacity(d));
+            Tooltip.hide();
+          })
+        .transition().duration(CONFIG.transition).delay((_, i) => i * 10)
+          .attr('r', d => scales.size(sizeAcc(d)));
+    }
 
-    // Labels — Health=Yes only, large enough bubbles
-    group.selectAll('text.bubble-label')
+    // Labels — Health=Yes only, large enough bubbles — own group appended last
+    g.append('g').attr('class', 'bubble-labels')
+      .selectAll('text.bubble-label')
       .data(data.filter(d => d.health && scales.size(sizeAcc(d)) >= 14), d => d.company)
       .join('text')
         .attr('class', 'bubble-label')
@@ -603,7 +614,13 @@
     );
     const availH = Math.round(availW * ASPECT);
 
-    const { margin } = CONFIG;
+    // Scale maxRadius and margins with available width so narrow charts
+    // don't get bubbles that dwarf the plot area.
+    const maxRadius = Math.min(72, Math.round(availW * 0.065));
+    const margin = availW < 520
+      ? { top: 20, right: 16, bottom: 72, left: 62 }
+      : CONFIG.margin;
+
     const w = availW - margin.left - margin.right;
     const h = availH - margin.top  - margin.bottom;
 
@@ -612,14 +629,11 @@
 
     const g       = d3.select(svgEl).append('g').attr('transform', `translate(${margin.left},${margin.top})`);
     const accessors = { xAcc, yAcc, sizeAcc };
-    const scales  = makeScales(data, w, h, accessors);
-
-    // Health companies rendered last so they appear in front of all others
-    const sorted = [...data].sort((a, b) => (a.health ? 1 : 0) - (b.health ? 1 : 0));
+    const scales  = makeScales(data, w, h, accessors, maxRadius);
 
     renderGrid(g, scales, w, h);
-    renderAxes(g, scales, w, h, { xLabel, yLabel, xTickFmt, yTickFmt });
-    renderBubbles(g, sorted, scales, { ...accessors, opacityY, opacityN, getColor });
+    renderAxes(g, scales, w, h, { xLabel, yLabel, xTickFmt, yTickFmt }, margin);
+    renderBubbles(g, data, scales, { ...accessors, opacityY, opacityN, getColor });
   };
 
 
