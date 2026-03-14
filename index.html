@@ -417,10 +417,40 @@
     const yExt     = d3.extent(yClamped);
     const sizeMax  = d3.max(data, sizeAcc);
 
+    const sizeScale = d3.scaleSqrt().domain([0, sizeMax]).range([CONFIG.minRadius, maxRadius]);
+
+    // Build initial scales from data extent (no .nice() — it over-extends log domains).
+    const xInit = d3.scaleLog().domain([xExt[0], xExt[1]]).range([0, w]);
+    const yInit = d3.scaleLog().domain([yExt[0], yExt[1]]).range([h, 0]);
+
+    // Walk every bubble to find the true pixel extent needed (center ± radius).
+    // Then invert those pixel positions back to data space so no bubble is clipped
+    // and there is no excess whitespace driven by .nice() overshooting.
+    const PAD = 14; // minimum px gap between any bubble edge and the plot boundary
+    let xPixMin = Infinity, xPixMax = -Infinity;
+    let yPixMin = Infinity, yPixMax = -Infinity;
+
+    data.forEach(d => {
+      const r  = sizeScale(sizeAcc(d));
+      const px = xInit(clampLog(xAcc(d), xFloor));
+      const py = yInit(clampLog(yAcc(d), yFloor));
+      xPixMin = Math.min(xPixMin, px - r);
+      xPixMax = Math.max(xPixMax, px + r);
+      yPixMin = Math.min(yPixMin, py - r);
+      yPixMax = Math.max(yPixMax, py + r);
+    });
+
+    // Invert padded pixel extents → domain values.
+    // y scale is inverted (range [h,0]), so larger py = smaller domain value.
+    const xDomLo = xInit.invert(xPixMin - PAD);
+    const xDomHi = xInit.invert(xPixMax + PAD);
+    const yDomLo = yInit.invert(yPixMax + PAD);
+    const yDomHi = yInit.invert(yPixMin - PAD);
+
     return {
-      x:       d3.scaleLog().domain([xExt[0], xExt[1]]).range([0, w]).nice(),
-      y:       d3.scaleLog().domain([yExt[0], yExt[1]]).range([h, 0]).nice(),
-      size:    d3.scaleSqrt().domain([0, sizeMax]).range([CONFIG.minRadius, maxRadius]),
+      x:      d3.scaleLog().domain([xDomLo, xDomHi]).range([0, w]),
+      y:      d3.scaleLog().domain([yDomLo, yDomHi]).range([h, 0]),
+      size:   sizeScale,
       xFloor,
       yFloor,
     };
