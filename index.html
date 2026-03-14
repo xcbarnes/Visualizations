@@ -503,7 +503,7 @@
 
   // ── Bubbles ───────────────────────────────────────────────────────────────
 
-  const renderBubbles = (g, data, scales, { xAcc, yAcc, sizeAcc, opacityY, opacityN, getColor }) => {
+  const renderBubbles = (g, data, scales, { xAcc, yAcc, sizeAcc, opacityY, opacityN, getColor, clipId }) => {
     const opacity = d => d.health ? opacityY : opacityN;
     const stroke  = d => d.health ? '#000000' : '#ffffff';
     const cx      = d => scales.x(clampLog(xAcc(d), scales.xFloor));
@@ -513,8 +513,8 @@
     // Health group is always later in SVG order so health bubbles always
     // render in front. .raise() on hover only promotes within its own group,
     // so non-health bubbles can never escape below the health layer.
-    const groupOthers = g.append('g').attr('class', 'bubbles-others');
-    const groupHealth = g.append('g').attr('class', 'bubbles-health');
+    const groupOthers = g.append('g').attr('class', 'bubbles-others').attr('clip-path', `url(#${clipId})`);
+    const groupHealth = g.append('g').attr('class', 'bubbles-health').attr('clip-path', `url(#${clipId})`);
 
     for (const [grp, subset] of [
       [groupOthers, data.filter(d => !d.health)],
@@ -552,7 +552,7 @@
     }
 
     // Labels — Health=Yes only, large enough bubbles — own group appended last
-    g.append('g').attr('class', 'bubble-labels')
+    g.append('g').attr('class', 'bubble-labels').attr('clip-path', `url(#${clipId})`)
       .selectAll('text.bubble-label')
       .data(data.filter(d => d.health && scales.size(sizeAcc(d)) >= 14), d => d.company)
       .join('text')
@@ -627,13 +627,18 @@
     d3.select(svgEl).selectAll('*').remove();
     d3.select(svgEl).attr('width', availW).attr('height', availH);
 
+    const clipId = `clip-${svgId}`;
+    d3.select(svgEl).append('defs')
+      .append('clipPath').attr('id', clipId)
+      .append('rect').attr('width', w).attr('height', h);
+
     const g       = d3.select(svgEl).append('g').attr('transform', `translate(${margin.left},${margin.top})`);
     const accessors = { xAcc, yAcc, sizeAcc };
     const scales  = makeScales(data, w, h, accessors, maxRadius);
 
     renderGrid(g, scales, w, h);
     renderAxes(g, scales, w, h, { xLabel, yLabel, xTickFmt, yTickFmt }, margin);
-    renderBubbles(g, data, scales, { ...accessors, opacityY, opacityN, getColor });
+    renderBubbles(g, data, scales, { ...accessors, opacityY, opacityN, getColor, clipId });
   };
 
 
